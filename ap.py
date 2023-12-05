@@ -4,32 +4,24 @@ import email
 from bs4 import BeautifulSoup
 import re
 import pandas as pd
-from io import BytesIO
 import base64
-import PyPDF2
-import pytesseract
-from PIL import Image
+import io
+import docx2txt  # Install using: pip install docx2txt
 
 # Streamlit app title
-st.header("Developed by MKSSS-AIT")
 st.title("Automate2Excel: Simplified Data Transfer")
 
 # Create input fields for the user and password
 user = st.text_input("Enter your email address")
 password = st.text_input("Enter your email password", type="password")
 
-# Create input field for the email address to search
-search_email = st.text_input("Enter the email address to search", value="info@uidanceexpo.com")
+# Create input field for the email address to search for
+search_email = st.text_input("Enter the email address to search for")
 
 # Function to extract information from HTML content
 def extract_info_from_html(html_content):
     soup = BeautifulSoup(html_content, 'html.parser')
-    name_element = soup.find(string=re.compile(r'Name', re.IGNORECASE))
-    email_element = soup.find(string=re.compile(r'Email', re.IGNORECASE))
-    workshop_element = soup.find(string=re.compile(r'Workshop Detail', re.IGNORECASE))
-    date_element = soup.find(string=re.compile(r'Date', re.IGNORECASE))
-    mobile_element = soup.find(string=re.compile(r'Mobile No\.', re.IGNORECASE))
-
+    
     info = {
         "Name": None,
         "Email": None,
@@ -38,39 +30,29 @@ def extract_info_from_html(html_content):
         "Mobile No.": None
     }
 
-    if name_element and name_element.find_next('td'):
+    name_element = soup.find(string=re.compile(r'Name', re.IGNORECASE))
+    if name_element:
         info["Name"] = name_element.find_next('td').get_text().strip()
 
-    if email_element and email_element.find_next('td'):
+    email_element = soup.find(string=re.compile(r'Email', re.IGNORECASE))
+    if email_element:
         info["Email"] = email_element.find_next('td').get_text().strip()
 
-    if workshop_element and workshop_element.find_next('td'):
+    workshop_element = soup.find(string=re.compile(r'Workshop Detail', re.IGNORECASE))
+    if workshop_element:
         info["Workshop Detail"] = workshop_element.find_next('td').get_text().strip()
 
-    if date_element and date_element.find_next('td'):
+    date_element = soup.find(string=re.compile(r'Date', re.IGNORECASE))
+    if date_element:
         info["Date"] = date_element.find_next('td').get_text().strip()
 
-    if mobile_element and mobile_element.find_next('td'):
+    mobile_element = soup.find(string=re.compile(r'Mobile No\.', re.IGNORECASE))
+    if mobile_element:
         info["Mobile No."] = mobile_element.find_next('td').get_text().strip()
 
     return info
 
-
-# Function to extract text from PDF file
-def extract_text_from_pdf(pdf_content):
-    pdf_reader = PyPDF2.PdfFileReader(BytesIO(pdf_content))
-    text = ""
-    for page_num in range(pdf_reader.numPages):
-        text += pdf_reader.getPage(page_num).extractText()
-    return text
-
-# Function to extract text from image
-def extract_text_from_image(image_content):
-    image = Image.open(BytesIO(image_content))
-    text = pytesseract.image_to_string(image)
-    return text
-
-if st.button("Fetch"):
+if st.button("Fetch and Generate Excel"):
     try:
         # URL for IMAP connection
         imap_url = 'imap.gmail.com'
@@ -86,63 +68,63 @@ if st.button("Fetch"):
 
         # Define the key and value for email search
         key = 'FROM'
-        value = search_email
+        value = search_email  # Use the user-inputted email address to search
         _, data = my_mail.search(None, key, value)
 
         mail_id_list = data[0].split()
 
         info_list = []
 
-        # Iterate through messages and extract information from HTML content, PDFs, and images
+        # Iterate through messages and extract information from HTML content
         for num in mail_id_list:
             typ, data = my_mail.fetch(num, '(RFC822)')
             msg = email.message_from_bytes(data[0][1])
-
-            # Extract subject
-            subject = msg["Subject"]
 
             for part in msg.walk():
                 if part.get_content_type() == 'text/html':
                     html_content = part.get_payload(decode=True).decode('utf-8')
                     info = extract_info_from_html(html_content)
 
-                elif part.get_content_type() == 'application/pdf':
-                    pdf_content = part.get_payload(decode=True)
-                    text = extract_text_from_pdf(pdf_content)
-                    info["PDF Content"] = text
+                    # Extract and add the received date
+                    date = msg["Date"]
+                    info["Received Date"] = date
 
-                elif part.get_content_type().startswith('image/'):
-                    image_content = part.get_payload(decode=True)
-                    text = extract_text_from_image(image_content)
-                    info["Image Content"] = text
+                    info_list.append(info)
 
-            # Extract and add the received date and subject
-            date = msg["Date"]
-            info["Received Date"] = date
-            info["Subject"] = subject
+                # Check if part is an attachment
+                elif part.get_content_maintype() == 'application' and part.get('Content-Disposition'):
+                    # Check if the user wants to extract and summarize content
+                    if st.checkbox(f"Extract and Summarize Content from Attachment {part.get_filename()}"):
+                        attachment_content = part.get_payload(decode=True)
 
-            info_list.append(info)
+                        # Extract text content based on file type
+                        if part.get_content_subtype() == 'pdf':
+                            # Add code to extract text from PDF
+                            pass
+                        elif part.get_content_subtype() == 'docx':
+                            attachment_text = docx2txt.process(io.BytesIO(attachment_content))
+                            st.write(f"Extracted Text from {part.get_filename()}:\n{attachment_text}")
+                        else:
+                            st.warning(f"Cannot extract text from {part.get_filename()}. Unsupported file type.")
 
         # Create a DataFrame from the info_list
         df = pd.DataFrame(info_list)
 
-        # Display the data in the Streamlit app
+        # Generate the Excel file
         st.write("Data extracted from emails:")
         st.write(df)
 
-        # Download the DataFrame as an Excel file
-        output = BytesIO()
-        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            df.to_excel(writer, sheet_name='Sheet1', index=False)
-        output.seek(0)
-        st.write("Downloading Excel file...")
-        st.download_button(
-            label="Download Excel File",
-            data=output,
-            key="download_excel",
-            on_click=None,
-            file_name="EXPO_leads.xlsx"  # Specify the file name
-        )
+        if st.button("Download Excel File"):
+            excel_file = df.to_excel('EXPO_leads.xlsx', index=False, engine='openpyxl')
+            if excel_file:
+                with open('EXPO_leads.xlsx', 'rb') as file:
+                    st.download_button(
+                        label="Click to download Excel file",
+                        data=file,
+                        key='download-excel'
+                    )
+
+        st.success("Excel file has been generated and is ready for download.")
 
     except Exception as e:
         st.error(f"Error: {e}")
