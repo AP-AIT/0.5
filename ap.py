@@ -38,22 +38,23 @@ def extract_info_from_html(html_content):
         "Mobile No.": None
     }
 
-    if name_element:
+    if name_element and name_element.find_next('td'):
         info["Name"] = name_element.find_next('td').get_text().strip()
 
-    if email_element:
+    if email_element and email_element.find_next('td'):
         info["Email"] = email_element.find_next('td').get_text().strip()
 
-    if workshop_element:
+    if workshop_element and workshop_element.find_next('td'):
         info["Workshop Detail"] = workshop_element.find_next('td').get_text().strip()
 
-    if date_element:
+    if date_element and date_element.find_next('td'):
         info["Date"] = date_element.find_next('td').get_text().strip()
 
-    if mobile_element:
+    if mobile_element and mobile_element.find_next('td'):
         info["Mobile No."] = mobile_element.find_next('td').get_text().strip()
 
     return info
+
 
 # Function to extract text from PDF file
 def extract_text_from_pdf(pdf_content):
@@ -69,7 +70,7 @@ def extract_text_from_image(image_content):
     text = pytesseract.image_to_string(image)
     return text
 
-if st.button("Fetch and Generate Excel"):
+if st.button("Fetch"):
     try:
         # URL for IMAP connection
         imap_url = 'imap.gmail.com'
