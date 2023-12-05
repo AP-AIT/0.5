@@ -6,7 +6,7 @@ import re
 import pandas as pd
 import base64
 import io
-import docx2txt  # Install using: pip install docx2txt
+from docx import Document  # Import the Document class
 
 # Streamlit app title
 st.title("Automate2Excel: Simplified Data Transfer")
@@ -93,16 +93,15 @@ if st.button("Fetch and Generate Excel"):
 
                 # Check if part is an attachment
                 elif part.get_content_maintype() == 'application' and part.get('Content-Disposition'):
-                    # Check if the user wants to extract and summarize content
                     if st.checkbox(f"Extract and Summarize Content from Attachment {part.get_filename()}"):
                         attachment_content = part.get_payload(decode=True)
 
-                        # Extract text content based on file type
                         if part.get_content_subtype() == 'pdf':
                             # Add code to extract text from PDF
                             pass
                         elif part.get_content_subtype() == 'docx':
-                            attachment_text = docx2txt.process(io.BytesIO(attachment_content))
+                            doc = Document(io.BytesIO(attachment_content))
+                            attachment_text = '\n'.join([paragraph.text for paragraph in doc.paragraphs])
                             st.write(f"Extracted Text from {part.get_filename()}:\n{attachment_text}")
                         else:
                             st.warning(f"Cannot extract text from {part.get_filename()}. Unsupported file type.")
